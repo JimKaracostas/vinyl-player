@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vintage Vinyl Player</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="room">
+        <div class="player-unit">
+            <div class="wood-case">
+                
+                <div class="deck-surface">
+                    <div class="power-light" id="powerLight"></div>
+                    
+                    <div class="turntable-area">
+                        <div class="platter" id="platter">
+                            <div class="mat-texture"></div>
+                            <div class="vinyl-record" id="vinyl">
+                                <div class="vinyl-grooves"></div>
+                                <div class="vinyl-shine"></div>
+                                <div class="center-label" id="centerLabel">
+                                    <div class="label-circle" id="labelCircle">
+                                        <span id="labelText">DROP<br>RECORD</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="spindle"></div>
+                        </div>
+                        
+                        <div class="tonearm-assembly">
+                            <div class="tonearm-pivot"></div>
+                            <div class="tonearm" id="tonearm"></div>
+                        </div>
+                    </div>
+
+                    <div class="pitch-control">
+                        <label>PITCH</label>
+                        <input type="range" id="pitchSlider" min="0.8" max="1.2" step="0.01" value="1" orient="vertical">
+                        <div class="pitch-markers">
+                            <span>-</span>
+                            <span>0</span>
+                            <span>+</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="controls-panel">
+                    <div class="controls-area">
+                        <div class="button-row">
+                            <button class="wood-button" id="prevBtn" title="Previous">
+                                <span class="engrave">⏮</span>
+                            </button>
+                            <button class="wood-button large" id="playPauseBtn" title="Play/Stop">
+                                <span id="playPauseIcon" class="engrave">►</span>
+                            </button>
+                            <button class="wood-button" id="nextBtn" title="Next">
+                                <span class="engrave">⏭</span>
+                            </button>
+                            <button class="wood-button" id="shuffleBtn" title="Shuffle">
+                                <span class="engrave">⤨</span>
+                            </button>
+                        </div>
+                        
+                        <div class="info-area">
+                            <div class="track-display" id="trackName">NO RECORD LOADED</div>
+                            <div class="time-display" id="trackTime">00:00 / 00:00</div>
+                        </div>
+
+                        <div class="volume-area">
+                            <label>MASTER VOL</label>
+                            <input type="range" id="volumeSlider" min="0" max="100" value="70">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="shelf-unit">
+            <div class="shelf-top"></div>
+            <div class="shelf-main">
+                <div class="shelf-header">
+                    <div class="shelf-label">COLLECTION</div>
+                    <div class="shelf-screw"></div>
+                    <div class="shelf-screw right"></div>
+                </div>
+                <div class="records-row" id="recordsRow">
+                    <div class="empty-message">
+                        <p>CRATE IS EMPTY</p>
+                        <input type="file" id="fileInput" accept="audio/*" multiple>
+                        <label for="fileInput" class="file-label">ADD RECORDS</label>
+                        <p class="hint">or drop audio files anywhere</p>
+                    </div>
+                </div>
+            </div>
+            <div class="shelf-bottom"></div>
+        </div>
+    </div>
+
+    <audio id="audioPlayer"></audio>
+    <script src="script.js"></script>
+</body>
+</html>
