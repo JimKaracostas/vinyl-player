@@ -44,12 +44,12 @@ No build tools, frameworks, or backend servers are required. This is a pure clie
 
 ## 🎮 How to Use
 
-1.  **Add Music:** \ Click the "ADD RECORDS" button in the bottom shelf area.
+1.  **Add Music:** \* Click the "ADD RECORDS" button in the bottom shelf area.
       * *Or* drag and drop a folder of MP3s anywhere onto the screen.
-2.  **Play a Record:**
+3.  **Play a Record:**
       * Click a record sleeve from the bottom shelf.
       * *Or* drag a sleeve from the shelf and drop it onto the turntable platter.
-3.  **Control Playback:**
+4.  **Control Playback:**
       * Click the **Play/Pause** button or press `Spacebar`.
       * Use the **Pitch Slider** (vertical fader) to speed up or slow down the track like a DJ.
 
