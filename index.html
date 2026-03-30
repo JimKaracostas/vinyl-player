@@ -1,104 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vintage Vinyl Player</title>
+    <title>vinyl-player</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-    <div class="room">
-        <div class="player-unit">
-            <div class="wood-case">
-                
-                <div class="deck-surface">
-                    <div class="power-light" id="powerLight"></div>
-                    
-                    <div class="turntable-area">
-                        <div class="platter" id="platter">
-                            <div class="mat-texture"></div>
-                            <div class="vinyl-record" id="vinyl">
-                                <div class="vinyl-grooves"></div>
-                                <div class="vinyl-shine"></div>
-                                <div class="center-label" id="centerLabel">
-                                    <div class="label-circle" id="labelCircle">
-                                        <span id="labelText">DROP<br>RECORD</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="spindle"></div>
-                        </div>
-                        
-                        <div class="tonearm-assembly">
-                            <div class="tonearm-pivot"></div>
-                            <div class="tonearm" id="tonearm"></div>
-                        </div>
-                    </div>
+    <div class="aurora-bg" aria-hidden="true"></div>
 
-                    <div class="pitch-control">
-                        <label>PITCH</label>
-                        <input type="range" id="pitchSlider" min="0.8" max="1.2" step="0.01" value="1" orient="vertical">
-                        <div class="pitch-markers">
-                            <span>-</span>
-                            <span>0</span>
-                            <span>+</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="controls-panel">
-                    <div class="controls-area">
-                        <div class="button-row">
-                            <button class="wood-button" id="prevBtn" title="Previous">
-                                <span class="engrave">⏮</span>
-                            </button>
-                            <button class="wood-button large" id="playPauseBtn" title="Play/Stop">
-                                <span id="playPauseIcon" class="engrave">►</span>
-                            </button>
-                            <button class="wood-button" id="nextBtn" title="Next">
-                                <span class="engrave">⏭</span>
-                            </button>
-                            <button class="wood-button" id="shuffleBtn" title="Shuffle">
-                                <span class="engrave">⤨</span>
-                            </button>
-                        </div>
-                        
-                        <div class="info-area">
-                            <div class="track-display" id="trackName">NO RECORD LOADED</div>
-                            <div class="time-display" id="trackTime">00:00 / 00:00</div>
-                        </div>
-
-                        <div class="volume-area">
-                            <label>MASTER VOL</label>
-                            <input type="range" id="volumeSlider" min="0" max="100" value="70">
-                        </div>
-                    </div>
-                </div>
+    <div class="app-shell">
+        <header class="top-bar">
+            <div class="brand-block">
+                <p class="brand-kicker">Desktop Audio Lab</p>
+                <h1>vinyl-player</h1>
             </div>
-        </div>
 
-        <div class="shelf-unit">
-            <div class="shelf-top"></div>
-            <div class="shelf-main">
-                <div class="shelf-header">
-                    <div class="shelf-label">COLLECTION</div>
-                    <div class="shelf-screw"></div>
-                    <div class="shelf-screw right"></div>
-                </div>
-                <div class="records-row" id="recordsRow">
-                    <div class="empty-message">
-                        <p>CRATE IS EMPTY</p>
-                        <input type="file" id="fileInput" accept="audio/*" multiple>
-                        <label for="fileInput" class="file-label">ADD RECORDS</label>
-                        <p class="hint">or drop audio files anywhere</p>
-                    </div>
-                </div>
+            <div class="top-actions">
+                <label class="search-wrap" for="searchInput">
+                    <span>Search</span>
+                    <input id="searchInput" type="search" placeholder="Find tracks">
+                </label>
+
+                <label class="sort-wrap" for="sortSelect">
+                    <span>Sort</span>
+                    <select id="sortSelect">
+                        <option value="added">Recently Added</option>
+                        <option value="title">Title A-Z</option>
+                        <option value="duration">Duration</option>
+                    </select>
+                </label>
+
+                <button id="addTracksBtn" class="ghost-btn" type="button">Add Tracks</button>
             </div>
-            <div class="shelf-bottom"></div>
-        </div>
+        </header>
+
+        <main class="workspace-grid">
+            <section class="panel library-panel">
+                <div class="panel-head">
+                    <h2>Library</h2>
+                    <p id="libraryStats">0 tracks</p>
+                </div>
+                <ul id="libraryList" class="track-list"></ul>
+                <div id="emptyState" class="empty-state">
+                    <h3>Your crate is empty</h3>
+                    <p>Drop audio files anywhere, or add tracks to build your deck.</p>
+                </div>
+            </section>
+
+            <section class="panel now-playing-panel">
+                <div class="record-stage" id="recordStage">
+                    <div class="record" id="record">
+                        <div class="record-rings"></div>
+                        <div class="record-label" id="recordLabel">
+                            <span id="recordLabelText">Drop Tracks</span>
+                        </div>
+                    </div>
+                    <div class="tonearm" id="tonearm"></div>
+                </div>
+
+                <div class="track-meta">
+                    <p class="meta-kicker">Now Spinning</p>
+                    <h2 id="nowTitle">No Track Loaded</h2>
+                    <p id="nowSub">Add a few files and hit play.</p>
+                </div>
+
+                <div class="timeline-wrap">
+                    <span id="currentTime">00:00</span>
+                    <input id="progressSlider" type="range" min="0" max="100" step="0.1" value="0">
+                    <span id="totalTime">00:00</span>
+                </div>
+
+                <div class="transport-row">
+                    <button id="shuffleBtn" type="button">Shuffle</button>
+                    <button id="prevBtn" type="button">Prev</button>
+                    <button id="playPauseBtn" class="primary" type="button">Play</button>
+                    <button id="nextBtn" type="button">Next</button>
+                    <button id="repeatBtn" type="button">Repeat Off</button>
+                </div>
+
+                <div class="mix-row">
+                    <label for="volumeSlider">
+                        Volume
+                        <input id="volumeSlider" type="range" min="0" max="100" value="80">
+                    </label>
+
+                    <label for="speedSlider">
+                        Speed
+                        <input id="speedSlider" type="range" min="0.7" max="1.5" step="0.01" value="1">
+                    </label>
+                </div>
+            </section>
+
+            <section class="panel queue-panel">
+                <div class="panel-head">
+                    <h2>Queue</h2>
+                    <button id="clearQueueBtn" class="ghost-btn" type="button">Clear</button>
+                </div>
+                <ol id="queueList" class="queue-list"></ol>
+                <div class="queue-actions">
+                    <button id="autofillQueueBtn" type="button">Fill From Library</button>
+                </div>
+            </section>
+        </main>
     </div>
 
+    <div id="dropOverlay" class="drop-overlay" aria-hidden="true">
+        <p>Drop audio files to load your set</p>
+    </div>
+
+    <input id="fileInput" type="file" accept="audio/*" multiple hidden>
     <audio id="audioPlayer"></audio>
     <script src="script.js"></script>
 </body>
+
 </html>

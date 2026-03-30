@@ -1,362 +1,582 @@
-// Get DOM elements
-const audioPlayer = document.getElementById('audioPlayer');
-const vinyl = document.getElementById('vinyl');
-const platter = document.getElementById('platter');
-const tonearm = document.getElementById('tonearm');
-const centerLabel = document.getElementById('centerLabel');
-const labelCircle = document.getElementById('labelCircle');
-const labelText = document.getElementById('labelText');
-const trackName = document.getElementById('trackName');
-const trackTime = document.getElementById('trackTime');
-const powerLight = document.getElementById('powerLight');
+const elements = {
+  audio: document.getElementById("audioPlayer"),
+  fileInput: document.getElementById("fileInput"),
+  addTracksBtn: document.getElementById("addTracksBtn"),
+  searchInput: document.getElementById("searchInput"),
+  sortSelect: document.getElementById("sortSelect"),
+  libraryStats: document.getElementById("libraryStats"),
+  libraryList: document.getElementById("libraryList"),
+  emptyState: document.getElementById("emptyState"),
+  queueList: document.getElementById("queueList"),
+  clearQueueBtn: document.getElementById("clearQueueBtn"),
+  autofillQueueBtn: document.getElementById("autofillQueueBtn"),
+  nowTitle: document.getElementById("nowTitle"),
+  nowSub: document.getElementById("nowSub"),
+  currentTime: document.getElementById("currentTime"),
+  totalTime: document.getElementById("totalTime"),
+  progressSlider: document.getElementById("progressSlider"),
+  playPauseBtn: document.getElementById("playPauseBtn"),
+  prevBtn: document.getElementById("prevBtn"),
+  nextBtn: document.getElementById("nextBtn"),
+  shuffleBtn: document.getElementById("shuffleBtn"),
+  repeatBtn: document.getElementById("repeatBtn"),
+  volumeSlider: document.getElementById("volumeSlider"),
+  speedSlider: document.getElementById("speedSlider"),
+  record: document.getElementById("record"),
+  recordLabel: document.getElementById("recordLabel"),
+  recordLabelText: document.getElementById("recordLabelText"),
+  tonearm: document.getElementById("tonearm"),
+  dropOverlay: document.getElementById("dropOverlay"),
+};
 
-const playPauseBtn = document.getElementById('playPauseBtn');
-const playPauseIcon = document.getElementById('playPauseIcon');
-const prevBtn = document.getElementById('prevBtn');
-const nextBtn = document.getElementById('nextBtn');
-const shuffleBtn = document.getElementById('shuffleBtn');
+const state = {
+  tracks: [],
+  queue: [],
+  currentTrackId: null,
+  search: "",
+  sort: "added",
+  isPlaying: false,
+  isSeeking: false,
+  shuffle: false,
+  repeat: "off",
+  volume: Number(localStorage.getItem("vinyl-player-volume") || 80),
+  speed: Number(localStorage.getItem("vinyl-player-speed") || 1),
+};
 
-const volumeSlider = document.getElementById('volumeSlider');
-const pitchSlider = document.getElementById('pitchSlider');
-const fileInput = document.getElementById('fileInput');
-const recordsRow = document.getElementById('recordsRow');
+const TONEARM_REST = -36;
+const TONEARM_START = -20;
+const TONEARM_END = 18;
 
-// State
-let tracks = [];
-let currentTrackIndex = -1;
-let isPlaying = false;
-let isDragging = false;
-let tonearmInterval;
+bootstrap();
 
-// Constants for Tonearm Physics
-const TONEARM_REST_ANGLE = -35;
-const TONEARM_START_ANGLE = -18;
-const TONEARM_END_ANGLE = 15;
-
-// Initialize
-audioPlayer.volume = 0.7;
-
-// --- File Handling ---
-
-fileInput.addEventListener('change', (e) => {
-    const files = Array.from(e.target.files);
-    loadAudioFiles(files);
-});
-
-function loadAudioFiles(files) {
-    const audioFiles = files.filter(f => f.type.startsWith('audio/'));
-    
-    if (audioFiles.length === 0) return;
-
-    if (tracks.length === 0) {
-        recordsRow.innerHTML = ''; // Clear "empty" message
-    }
-
-    audioFiles.forEach((file, index) => {
-        const url = URL.createObjectURL(file);
-        // Create a unique color set based on filename
-        const colors = generateColorFromTitle(file.name);
-        
-        const track = {
-            title: file.name.replace(/\.[^/.]+$/, ''),
-            file: file,
-            url: url,
-            duration: 0,
-            colors: colors
-        };
-        
-        const trackIndex = tracks.length;
-        tracks.push(track);
-        createVinylSleeve(track, trackIndex);
-    });
+function bootstrap() {
+  elements.audio.volume = state.volume / 100;
+  elements.audio.playbackRate = state.speed;
+  elements.volumeSlider.value = String(state.volume);
+  elements.speedSlider.value = String(state.speed);
+  updateRecordSpeed();
+  updateRepeatButton();
+  bindEvents();
+  render();
 }
 
-function generateColorFromTitle(title) {
-    // Simple hash function to get deterministic numbers from string
-    let hash = 0;
-    for (let i = 0; i < title.length; i++) {
-        hash = title.charCodeAt(i) + ((hash << 5) - hash);
+function bindEvents() {
+  elements.addTracksBtn.addEventListener("click", () =>
+    elements.fileInput.click(),
+  );
+  elements.fileInput.addEventListener("change", handleFilePick);
+  elements.searchInput.addEventListener("input", handleSearch);
+  elements.sortSelect.addEventListener("change", handleSortChange);
+  elements.clearQueueBtn.addEventListener("click", clearQueue);
+  elements.autofillQueueBtn.addEventListener("click", fillQueueFromLibrary);
+
+  elements.playPauseBtn.addEventListener("click", togglePlayPause);
+  elements.prevBtn.addEventListener("click", playPrevious);
+  elements.nextBtn.addEventListener("click", playNext);
+  elements.shuffleBtn.addEventListener("click", toggleShuffle);
+  elements.repeatBtn.addEventListener("click", cycleRepeatMode);
+
+  elements.volumeSlider.addEventListener("input", handleVolumeChange);
+  elements.speedSlider.addEventListener("input", handleSpeedChange);
+  elements.progressSlider.addEventListener("input", handleSeekInput);
+  elements.progressSlider.addEventListener("change", handleSeekCommit);
+
+  elements.audio.addEventListener("timeupdate", handleTimeUpdate);
+  elements.audio.addEventListener("loadedmetadata", handleMetadataLoaded);
+  elements.audio.addEventListener("ended", handleTrackEnded);
+
+  document.addEventListener("keydown", handleKeyboard);
+  window.addEventListener("dragover", handleGlobalDragOver);
+  window.addEventListener("dragleave", handleGlobalDragLeave);
+  window.addEventListener("drop", handleGlobalDrop);
+}
+
+function handleFilePick(event) {
+  const files = Array.from(event.target.files || []);
+  loadAudioFiles(files, true);
+  event.target.value = "";
+}
+
+function loadAudioFiles(files, autoplayFirst) {
+  const audioFiles = files.filter((file) => file.type.startsWith("audio/"));
+  if (!audioFiles.length) {
+    return;
+  }
+
+  const newTracks = [];
+  for (const file of audioFiles) {
+    const duplicate = state.tracks.some(
+      (track) => track.fileName === file.name && track.size === file.size,
+    );
+    if (duplicate) {
+      continue;
     }
-    
-    const h1 = Math.abs(hash % 360);
-    const h2 = Math.abs((hash * 2) % 360);
-    
-    return {
-        gradient: `linear-gradient(135deg, hsl(${h1}, 60%, 40%), hsl(${h2}, 50%, 30%))`,
-        label: `hsl(${h1}, 70%, 50%)`
+
+    const id = `track-${crypto.randomUUID()}`;
+    const palette = buildPalette(file.name);
+    const title = file.name.replace(/\.[^/.]+$/, "");
+    const track = {
+      id,
+      title,
+      fileName: file.name,
+      size: file.size,
+      url: URL.createObjectURL(file),
+      addedAt: Date.now(),
+      duration: 0,
+      gradient: palette.gradient,
+      labelColor: palette.labelColor,
     };
+    newTracks.push(track);
+    state.tracks.push(track);
+    extractDuration(track);
+  }
+
+  if (!state.queue.length) {
+    state.queue = state.tracks.map((track) => track.id);
+  } else {
+    state.queue.push(...newTracks.map((track) => track.id));
+  }
+
+  if (autoplayFirst && !state.currentTrackId && newTracks.length) {
+    setCurrentTrack(newTracks[0].id, true);
+  }
+
+  render();
 }
 
-function createVinylSleeve(track, index) {
-    const sleeve = document.createElement('div');
-    sleeve.className = 'vinyl-sleeve';
-    sleeve.draggable = true;
-    sleeve.dataset.index = index;
-
-    sleeve.innerHTML = `
-        <div class="sleeve-art" style="background: ${track.colors.gradient}"></div>
-        <div class="sleeve-info">
-            <div class="sleeve-title">${track.title}</div>
-            <div class="time-display" id="time-${index}">--:--</div>
-        </div>
-    `;
-
-    // Metadata loading for duration
-    const temp = new Audio(track.url);
-    temp.addEventListener('loadedmetadata', () => {
-        track.duration = temp.duration;
-        const timeEl = document.getElementById(`time-${index}`);
-        if (timeEl) timeEl.textContent = formatTime(track.duration);
-    });
-
-    // Drag Events
-    sleeve.addEventListener('dragstart', (e) => {
-        e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('trackIndex', index);
-        sleeve.style.opacity = '0.5';
-    });
-
-    sleeve.addEventListener('dragend', (e) => {
-        sleeve.style.opacity = '1';
-    });
-
-    // Click to Load
-    sleeve.addEventListener('click', () => {
-        loadTrack(index);
-        play();
-    });
-
-    recordsRow.appendChild(sleeve);
+function extractDuration(track) {
+  const probe = new Audio(track.url);
+  probe.addEventListener("loadedmetadata", () => {
+    track.duration = Number.isFinite(probe.duration) ? probe.duration : 0;
+    renderLibrary();
+    renderNowPlaying();
+  });
 }
 
-// --- Drag & Drop Zones ---
+function buildPalette(seedText) {
+  let hash = 0;
+  for (let i = 0; i < seedText.length; i += 1) {
+    hash = seedText.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hueA = Math.abs(hash % 360);
+  const hueB = Math.abs((hash * 2) % 360);
+  return {
+    gradient: `linear-gradient(140deg, hsl(${hueA}, 78%, 56%), hsl(${hueB}, 72%, 45%))`,
+    labelColor: `hsl(${hueA}, 76%, 52%)`,
+  };
+}
 
-platter.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    platter.classList.add('drag-over');
-});
+function handleSearch(event) {
+  state.search = event.target.value.trim().toLowerCase();
+  renderLibrary();
+}
 
-platter.addEventListener('dragleave', () => {
-    platter.classList.remove('drag-over');
-});
+function handleSortChange(event) {
+  state.sort = event.target.value;
+  renderLibrary();
+}
 
-platter.addEventListener('drop', (e) => {
-    e.preventDefault();
-    platter.classList.remove('drag-over');
+function render() {
+  renderLibrary();
+  renderQueue();
+  renderNowPlaying();
+}
 
-    const trackIndex = e.dataTransfer.getData('trackIndex');
-    
-    // Internal drop (from crate)
-    if (trackIndex) {
-        loadTrack(parseInt(trackIndex));
-        play();
+function filteredTracks() {
+  let filtered = state.tracks.filter((track) =>
+    track.title.toLowerCase().includes(state.search),
+  );
+
+  filtered = filtered.sort((a, b) => {
+    if (state.sort === "title") {
+      return a.title.localeCompare(b.title);
+    }
+    if (state.sort === "duration") {
+      return (b.duration || 0) - (a.duration || 0);
+    }
+    return b.addedAt - a.addedAt;
+  });
+
+  return filtered;
+}
+
+function renderLibrary() {
+  const list = filteredTracks();
+  const totalDuration = state.tracks.reduce(
+    (sum, track) => sum + (track.duration || 0),
+    0,
+  );
+  elements.libraryStats.textContent = `${state.tracks.length} tracks • ${formatTime(totalDuration)}`;
+  elements.emptyState.style.display = state.tracks.length ? "none" : "grid";
+
+  elements.libraryList.innerHTML = "";
+  for (const track of list) {
+    const item = document.createElement("li");
+    if (state.currentTrackId === track.id) {
+      item.classList.add("is-active");
+    }
+
+    item.innerHTML = `
+            <div class="track-swatch" style="background: ${track.gradient}"></div>
+            <div class="track-main">
+                <h3>${escapeHtml(track.title)}</h3>
+                <p>${formatTime(track.duration)}</p>
+            </div>
+            <div class="mini-actions">
+                <button type="button" data-action="play" data-id="${track.id}">Play</button>
+                <button type="button" data-action="queue" data-id="${track.id}">Queue</button>
+            </div>
+        `;
+
+    item.addEventListener("click", (event) => {
+      if (event.target.closest("button")) {
         return;
+      }
+      setCurrentTrack(track.id, false);
+    });
+
+    item.querySelector('[data-action="play"]').addEventListener("click", () => {
+      setCurrentTrack(track.id, true);
+    });
+
+    item
+      .querySelector('[data-action="queue"]')
+      .addEventListener("click", () => {
+        state.queue.push(track.id);
+        renderQueue();
+      });
+
+    elements.libraryList.appendChild(item);
+  }
+}
+
+function renderQueue() {
+  elements.queueList.innerHTML = "";
+  if (!state.queue.length) {
+    const item = document.createElement("li");
+    item.innerHTML = '<span class="queue-title">Queue is empty</span>';
+    elements.queueList.appendChild(item);
+    return;
+  }
+
+  state.queue.forEach((id, index) => {
+    const track = getTrackById(id);
+    if (!track) {
+      return;
     }
+    const item = document.createElement("li");
+    item.innerHTML = `
+            <span class="queue-title">${escapeHtml(track.title)}</span>
+            <button type="button" data-index="${index}">Remove</button>
+        `;
 
-    // External drop (from desktop)
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-        loadAudioFiles(files);
-        // Auto-play the first new file
-        setTimeout(() => {
-            if (tracks.length > 0) {
-                loadTrack(tracks.length - files.length);
-                play();
-            }
-        }, 100);
+    item.querySelector("button").addEventListener("click", () => {
+      state.queue.splice(index, 1);
+      renderQueue();
+    });
+
+    elements.queueList.appendChild(item);
+  });
+}
+
+function renderNowPlaying() {
+  const track = getTrackById(state.currentTrackId);
+  if (!track) {
+    elements.nowTitle.textContent = "No Track Loaded";
+    elements.nowSub.textContent = "Add a few files and hit play.";
+    elements.recordLabel.style.background =
+      "linear-gradient(140deg, #ef6f2c, #f79d67)";
+    elements.recordLabelText.textContent = "Drop Tracks";
+    elements.currentTime.textContent = "00:00";
+    elements.totalTime.textContent = "00:00";
+    elements.progressSlider.value = "0";
+    return;
+  }
+
+  elements.nowTitle.textContent = track.title;
+  elements.nowSub.textContent = `${formatTime(track.duration)} • ${track.fileName}`;
+  elements.recordLabel.style.background = track.gradient;
+  elements.recordLabelText.textContent = truncateLabel(track.title);
+
+  const duration = Number.isFinite(elements.audio.duration)
+    ? elements.audio.duration
+    : track.duration;
+  elements.totalTime.textContent = formatTime(duration);
+}
+
+function setCurrentTrack(trackId, autoplay) {
+  const track = getTrackById(trackId);
+  if (!track) {
+    return;
+  }
+
+  state.currentTrackId = track.id;
+  elements.audio.src = track.url;
+  elements.audio.playbackRate = state.speed;
+  elements.progressSlider.value = "0";
+  elements.currentTime.textContent = "00:00";
+  moveTonearm(TONEARM_START);
+
+  renderLibrary();
+  renderNowPlaying();
+
+  if (autoplay) {
+    playCurrent();
+  } else {
+    pauseCurrent();
+  }
+}
+
+async function playCurrent() {
+  if (!state.currentTrackId) {
+    const firstTrack = filteredTracks()[0];
+    if (firstTrack) {
+      setCurrentTrack(firstTrack.id, true);
     }
-});
+    return;
+  }
 
-// Allow dropping files anywhere on body
-document.body.addEventListener('dragover', e => e.preventDefault());
-document.body.addEventListener('drop', (e) => {
-    e.preventDefault();
-    if (!platter.contains(e.target)) {
-        const files = Array.from(e.dataTransfer.files);
-        if (files.length > 0) loadAudioFiles(files);
-    }
-});
-
-// --- Player Logic ---
-
-function loadTrack(index) {
-    if (index < 0 || index >= tracks.length) return;
-    
-    // Stop previous track
-    pause(); 
-    moveTonearmToRest();
-
-    currentTrackIndex = index;
-    const track = tracks[index];
-    
-    audioPlayer.src = track.url;
-    audioPlayer.playbackRate = pitchSlider.value; // Apply current pitch
-    
-    trackName.textContent = track.title;
-    
-    // Update Vinyl Label
-    labelCircle.style.background = track.colors.label;
-    
-    // Format label text
-    const shortTitle = track.title.length > 20 
-        ? track.title.substring(0, 20) + '...' 
-        : track.title;
-    labelText.innerHTML = shortTitle.split(' ').join('<br>');
-    
-    updateTimeDisplay();
-    powerLight.classList.add('on');
+  try {
+    await elements.audio.play();
+    state.isPlaying = true;
+    elements.playPauseBtn.textContent = "Pause";
+    elements.record.classList.add("playing");
+    updateRecordSpeed();
+  } catch (_error) {
+    state.isPlaying = false;
+    elements.playPauseBtn.textContent = "Play";
+  }
 }
 
-// Toggle Play/Pause
-playPauseBtn.addEventListener('click', () => {
-    if (currentTrackIndex === -1) return;
-    isPlaying ? pause() : play();
-});
-
-// Click vinyl to pause
-vinyl.addEventListener('click', () => {
-    if (currentTrackIndex !== -1) isPlaying ? pause() : play();
-});
-
-function play() {
-    if (currentTrackIndex === -1) return;
-    
-    vinyl.classList.add('spinning');
-    playPauseIcon.textContent = '⏸';
-    powerLight.classList.add('on');
-    
-    // 1. Move Tonearm to start
-    moveTonearmToStart();
-
-    // 2. Wait for arm to land before audio starts (Needle Drop effect)
-    setTimeout(() => {
-        if(vinyl.classList.contains('spinning')) { // Check if still supposed to be playing
-            audioPlayer.play().then(() => {
-                isPlaying = true;
-                startTonearmTracking();
-            }).catch(e => console.error(e));
-        }
-    }, 800); // 800ms delay for arm movement
+function pauseCurrent() {
+  elements.audio.pause();
+  state.isPlaying = false;
+  elements.playPauseBtn.textContent = "Play";
+  elements.record.classList.remove("playing");
 }
 
-function pause() {
-    audioPlayer.pause();
-    vinyl.classList.remove('spinning');
-    isPlaying = false;
-    playPauseIcon.textContent = '►';
-    
-    stopTonearmTracking();
-    moveTonearmToRest();
-    
-    // We keep power light on if track is loaded, just paused
+function togglePlayPause() {
+  if (state.isPlaying) {
+    pauseCurrent();
+    moveTonearm(TONEARM_REST);
+    return;
+  }
+
+  moveTonearm(TONEARM_START);
+  playCurrent();
 }
-
-// --- Tonearm Animation Physics ---
-
-function moveTonearmToRest() {
-    tonearm.style.transform = `rotate(${TONEARM_REST_ANGLE}deg)`;
-}
-
-function moveTonearmToStart() {
-    tonearm.style.transform = `rotate(${TONEARM_START_ANGLE}deg)`;
-}
-
-function startTonearmTracking() {
-    clearInterval(tonearmInterval);
-    tonearmInterval = setInterval(() => {
-        if (!isPlaying) return;
-        
-        const duration = audioPlayer.duration || 1;
-        const current = audioPlayer.currentTime || 0;
-        const percent = current / duration;
-        
-        // Calculate angle between Start and End based on percentage
-        const angle = TONEARM_START_ANGLE + (percent * (TONEARM_END_ANGLE - TONEARM_START_ANGLE));
-        tonearm.style.transform = `rotate(${angle}deg)`;
-        
-    }, 100);
-}
-
-function stopTonearmTracking() {
-    clearInterval(tonearmInterval);
-}
-
-// --- Navigation ---
-
-prevBtn.addEventListener('click', () => {
-    if (currentTrackIndex > 0) {
-        loadTrack(currentTrackIndex - 1);
-        play();
-    }
-});
-
-nextBtn.addEventListener('click', playNext);
 
 function playNext() {
-    if (currentTrackIndex < tracks.length - 1) {
-        loadTrack(currentTrackIndex + 1);
-        play();
-    } else {
-        // End of playlist: lift arm, stop spinning
-        pause();
-        powerLight.classList.remove('on');
-    }
+  if (!state.tracks.length) {
+    return;
+  }
+
+  if (state.shuffle) {
+    const randomTrack =
+      state.tracks[Math.floor(Math.random() * state.tracks.length)];
+    setCurrentTrack(randomTrack.id, true);
+    return;
+  }
+
+  if (state.queue.length) {
+    const nextId = state.queue.shift();
+    renderQueue();
+    setCurrentTrack(nextId, true);
+    return;
+  }
+
+  const tracks = filteredTracks();
+  const currentIndex = tracks.findIndex(
+    (track) => track.id === state.currentTrackId,
+  );
+  const nextTrack = tracks[currentIndex + 1];
+  if (nextTrack) {
+    setCurrentTrack(nextTrack.id, true);
+    return;
+  }
+
+  if (state.repeat === "all" && tracks[0]) {
+    setCurrentTrack(tracks[0].id, true);
+    return;
+  }
+
+  pauseCurrent();
+  moveTonearm(TONEARM_REST);
 }
 
-shuffleBtn.addEventListener('click', () => {
-    if (tracks.length === 0) return;
-    const randomIndex = Math.floor(Math.random() * tracks.length);
-    loadTrack(randomIndex);
-    play();
-});
+function playPrevious() {
+  const tracks = filteredTracks();
+  if (!tracks.length) {
+    return;
+  }
 
-// --- Controls ---
+  const currentIndex = tracks.findIndex(
+    (track) => track.id === state.currentTrackId,
+  );
+  const previousTrack = tracks[currentIndex - 1] || tracks[0];
+  setCurrentTrack(previousTrack.id, true);
+}
 
-// Volume
-volumeSlider.addEventListener('input', (e) => {
-    audioPlayer.volume = e.target.value / 100;
-});
+function toggleShuffle() {
+  state.shuffle = !state.shuffle;
+  elements.shuffleBtn.textContent = state.shuffle ? "Shuffle On" : "Shuffle";
+}
 
-// Pitch (Speed)
-pitchSlider.addEventListener('input', (e) => {
-    // Normal range 0.8 to 1.2
-    audioPlayer.playbackRate = e.target.value;
-    
-    // Visual feedback: Spin faster/slower?
-    // We can tweak animation duration
-    const speed = 1.8 / e.target.value; // Base speed is 1.8s per rotation
-    if (isPlaying) {
-        vinyl.style.animationDuration = `${speed}s`;
-    }
-});
+function cycleRepeatMode() {
+  if (state.repeat === "off") {
+    state.repeat = "one";
+  } else if (state.repeat === "one") {
+    state.repeat = "all";
+  } else {
+    state.repeat = "off";
+  }
+  updateRepeatButton();
+}
 
-// Time Display Update
-audioPlayer.addEventListener('timeupdate', () => {
-    updateTimeDisplay();
-});
+function updateRepeatButton() {
+  const label =
+    state.repeat === "off"
+      ? "Repeat Off"
+      : state.repeat === "one"
+        ? "Repeat One"
+        : "Repeat All";
+  elements.repeatBtn.textContent = label;
+}
 
-function updateTimeDisplay() {
-    const current = audioPlayer.currentTime || 0;
-    const duration = audioPlayer.duration || 0;
-    trackTime.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+function clearQueue() {
+  state.queue = [];
+  renderQueue();
+}
+
+function fillQueueFromLibrary() {
+  state.queue = filteredTracks().map((track) => track.id);
+  renderQueue();
+}
+
+function handleTimeUpdate() {
+  const duration = elements.audio.duration || 0;
+  const current = elements.audio.currentTime || 0;
+  elements.currentTime.textContent = formatTime(current);
+  elements.totalTime.textContent = formatTime(duration);
+
+  if (!state.isSeeking && duration > 0) {
+    elements.progressSlider.value = ((current / duration) * 100).toFixed(2);
+  }
+
+  const progress = duration > 0 ? current / duration : 0;
+  const angle = TONEARM_START + progress * (TONEARM_END - TONEARM_START);
+  moveTonearm(angle);
+}
+
+function handleMetadataLoaded() {
+  renderNowPlaying();
+}
+
+function handleTrackEnded() {
+  if (state.repeat === "one") {
+    elements.audio.currentTime = 0;
+    playCurrent();
+    return;
+  }
+  playNext();
+}
+
+function handleVolumeChange(event) {
+  state.volume = Number(event.target.value);
+  elements.audio.volume = state.volume / 100;
+  localStorage.setItem("vinyl-player-volume", String(state.volume));
+}
+
+function handleSpeedChange(event) {
+  state.speed = Number(event.target.value);
+  elements.audio.playbackRate = state.speed;
+  localStorage.setItem("vinyl-player-speed", String(state.speed));
+  updateRecordSpeed();
+}
+
+function updateRecordSpeed() {
+  const speed = Math.max(0.6, 1.8 / state.speed);
+  document.documentElement.style.setProperty(
+    "--record-speed",
+    `${speed.toFixed(2)}s`,
+  );
+}
+
+function handleSeekInput(event) {
+  state.isSeeking = true;
+  const duration = elements.audio.duration || 0;
+  const previewTime = (Number(event.target.value) / 100) * duration;
+  elements.currentTime.textContent = formatTime(previewTime);
+}
+
+function handleSeekCommit(event) {
+  const duration = elements.audio.duration || 0;
+  const nextTime = (Number(event.target.value) / 100) * duration;
+  elements.audio.currentTime = nextTime;
+  state.isSeeking = false;
+}
+
+function handleKeyboard(event) {
+  if (event.target.tagName === "INPUT" || event.target.tagName === "SELECT") {
+    return;
+  }
+  if (event.code === "Space") {
+    event.preventDefault();
+    togglePlayPause();
+  }
+  if (event.code === "ArrowRight") {
+    playNext();
+  }
+  if (event.code === "ArrowLeft") {
+    playPrevious();
+  }
+}
+
+function handleGlobalDragOver(event) {
+  event.preventDefault();
+  elements.dropOverlay.classList.add("active");
+}
+
+function handleGlobalDragLeave(event) {
+  if (event.relatedTarget || event.clientX > 0 || event.clientY > 0) {
+    return;
+  }
+  elements.dropOverlay.classList.remove("active");
+}
+
+function handleGlobalDrop(event) {
+  event.preventDefault();
+  elements.dropOverlay.classList.remove("active");
+  const files = Array.from(event.dataTransfer?.files || []);
+  loadAudioFiles(files, true);
+}
+
+function moveTonearm(angle) {
+  elements.tonearm.style.transform = `rotate(${angle}deg)`;
+}
+
+function getTrackById(trackId) {
+  return state.tracks.find((track) => track.id === trackId) || null;
+}
+
+function truncateLabel(text) {
+  return text.length > 18 ? `${text.slice(0, 18)}...` : text;
 }
 
 function formatTime(seconds) {
-    if (!seconds || isNaN(seconds)) return '00:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return "00:00";
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.floor(seconds % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`;
 }
 
-// Auto-play next on end
-audioPlayer.addEventListener('ended', () => {
-    playNext();
-});
-
-// --- Keyboard Shortcuts ---
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-        e.preventDefault();
-        if (currentTrackIndex !== -1) isPlaying ? pause() : play();
-    }
-});
+function escapeHtml(text) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
