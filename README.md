@@ -1,5 +1,5 @@
 <h1 align="center">
-  Vinyl Player 🎵
+  Vinyl Player
 </h1>
 
 <p align="center">
